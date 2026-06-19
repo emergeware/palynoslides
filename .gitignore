@@ -1,6 +1,10 @@
 # Originais 40MB — regenerar com gerar_dzi.py
 images/perfl*.jpg
 
+# Arquivos temporários do pipeline de processamento
+images/_proc_*.jpg
+images/_test_*.jpg
+
 # PowerPoint temporário
 ~$*
 
