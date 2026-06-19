@@ -1,9 +1,6 @@
 # Originais 40MB — regenerar com gerar_dzi.py
 images/perfl*.jpg
 
-# DZI tiles (artefatos de build, ~25MB cada, regeneráveis)
-images/dzi/
-
 # PowerPoint temporário
 ~$*
 
