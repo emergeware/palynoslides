@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palinomorfos — Visualizador Microscópico</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/openseadragon@4.1.1/build/openseadragon/openseadragon.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;0,700;0,900;1,300&family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    display: ['"Crimson Pro"', 'serif'],
+                    body: ['"Outfit"', 'sans-serif'],
+                }
+            }
+        }
+    }
+    </script>
+
+    <style>
+        :root {
+            --bg: #040810;
+            --bg-deep: #020509;
+            --fg: #e2e5f0;
+            --muted: #6a6e8a;
+            --accent: #00c98d;
+            --accent-dim: rgba(0,201,141,0.14);
+            --warm: #c8983e;
+            --warm-dim: rgba(200,152,62,0.12);
+            --card: rgba(8,13,26,0.82);
+            --border: rgba(90,100,140,0.12);
+            --topbar-h: 84px;
+        }
+
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        html{scroll-behavior:smooth}
+
+        body{
+            font-family:'Outfit',sans-serif;
+            background:var(--bg);
+            color:var(--fg);
+            overflow-x:hidden;
+            min-height:100vh;
+            padding-top:var(--topbar-h);
+        }
+
+        /* ===== Top Bar (logos institucionais) ===== */
+        .top-bar{
+            position:fixed;top:0;left:0;right:0;z-index:100;
+            height:var(--topbar-h);
+            background:#ffffff;
+            border-bottom:1px solid rgba(0,0,0,0.08);
+            display:flex;align-items:center;justify-content:center;
+            gap:3rem;
+            box-shadow:0 2px 14px rgba(0,0,0,0.35);
+        }
+        .top-bar-logo{
+            display:inline-flex;align-items:center;
+            height:calc(var(--topbar-h) - 24px);
+            transition:opacity .25s ease,transform .25s ease;
+        }
+        .top-bar-logo:hover{opacity:.75;transform:translateY(-1px)}
+        .top-bar-logo:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
+        .top-bar-logo img{height:100%;width:auto;display:block}
+        .top-bar-divider{
+            width:1px;height:38px;
+            background:linear-gradient(to bottom,transparent,rgba(0,0,0,0.18),transparent);
+        }
+
+        /* ===== Canvas ===== */
+        #bg-canvas{
+            position:fixed;inset:0;z-index:0;
+            pointer-events:none;
+        }
+
+        .vignette{
+            position:fixed;inset:0;z-index:1;pointer-events:none;
+            background:radial-gradient(ellipse at center,transparent 30%,rgba(2,5,9,0.55) 70%,rgba(2,5,9,0.85) 100%);
+        }
+
+        .scan-line{
+            position:fixed;left:0;right:0;height:1px;
+            background:linear-gradient(90deg,transparent 5%,rgba(0,201,141,0.06) 30%,rgba(0,201,141,0.18) 50%,rgba(0,201,141,0.06) 70%,transparent 95%);
+            z-index:2;pointer-events:none;
+            animation:scanMove 12s ease-in-out infinite;
+        }
+        @keyframes scanMove{
+            0%,100%{top:-2px}
+            50%{top:100%}
+        }
+
+        /* ===== Hero ===== */
+        .hero{
+            position:relative;z-index:10;
+            min-height:calc(100vh - var(--topbar-h));
+            display:flex;flex-direction:column;
+            justify-content:center;align-items:center;
+            text-align:center;
+            padding:2rem 1.5rem;
+        }
+
+        .hero-pre-title{
+            font-size:.7rem;font-weight:500;
+            letter-spacing:.22em;text-transform:uppercase;
+            color:var(--accent);margin-bottom:1.2rem;
+            opacity:0;animation:fadeUp 1s .35s forwards;
+        }
+
+        .hero-title-pt{
+            font-family:'Crimson Pro',serif;font-weight:700;
+            font-size:clamp(1.5rem,3.6vw,3rem);
+            line-height:1.18;color:var(--fg);
+            max-width:780px;margin-bottom:.3rem;
+            opacity:0;animation:fadeUp 1s .5s forwards;
+        }
+
+        .hero-subtitle-pt{
+            font-family:'Crimson Pro',serif;font-weight:300;
+            font-size:clamp(.95rem,2vw,1.5rem);
+            color:var(--accent);margin-bottom:1.3rem;
+            opacity:0;animation:fadeUp 1s .65s forwards;
+        }
+
+        .hero-title-en{
+            font-family:'Crimson Pro',serif;font-weight:300;
+            font-style:italic;
+            font-size:clamp(.8rem,1.5vw,1.1rem);
+            color:var(--muted);max-width:660px;
+            margin-bottom:2rem;
+            opacity:0;animation:fadeUp 1s .8s forwards;
+        }
+
+        .hero-authors{
+            font-size:.82rem;font-weight:400;
+            color:rgba(200,200,220,0.55);
+            max-width:600px;line-height:1.7;
+            margin-bottom:.35rem;
+            opacity:0;animation:fadeUp 1s .9s forwards;
+        }
+
+        .hero-institution{
+            font-size:.7rem;
+            color:rgba(120,124,150,0.5);
+            max-width:500px;line-height:1.6;
+            margin-bottom:3rem;
+            opacity:0;animation:fadeUp 1s 1s forwards;
+        }
+
+        .hero-btn{
+            display:inline-flex;align-items:center;gap:.7rem;
+            padding:.85rem 2.4rem;
+            border:1px solid var(--accent);
+            background:transparent;color:var(--accent);
+            font-family:'Outfit',sans-serif;font-weight:500;
+            font-size:.82rem;letter-spacing:.14em;
+            text-transform:uppercase;cursor:pointer;
+            position:relative;overflow:hidden;
+            transition:color .4s ease;
+            opacity:0;animation:fadeUp 1s 1.15s forwards;
+        }
+        .hero-btn::before{
+            content:'';position:absolute;inset:0;
+            background:var(--accent);
+            transform:scaleX(0);transform-origin:left;
+            transition:transform .45s cubic-bezier(.16,1,.3,1);
+            z-index:-1;
+        }
+        .hero-btn:hover{color:var(--bg-deep)}
+        .hero-btn:hover::before{transform:scaleX(1)}
+        .hero-btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+        .hero-scroll{
+            position:absolute;bottom:2.5rem;left:50%;
+            transform:translateX(-50%);
+            display:flex;flex-direction:column;align-items:center;gap:.5rem;
+            opacity:0;animation:fadeUp 1s 1.5s forwards;
+        }
+        .hero-scroll-text{
+            font-size:.58rem;letter-spacing:.2em;
+            text-transform:uppercase;color:var(--muted);
+        }
+        .hero-scroll-line{
+            width:1px;height:34px;
+            background:linear-gradient(to bottom,var(--accent),transparent);
+            animation:scrollPulse 2.5s ease-in-out infinite;
+        }
+        @keyframes scrollPulse{
+            0%,100%{opacity:.35;transform:scaleY(.7)}
+            50%{opacity:1;transform:scaleY(1)}
+        }
+        @keyframes fadeUp{
+            from{opacity:0;transform:translateY(22px)}
+            to{opacity:1;transform:translateY(0)}
+        }
+
+        /* ===== Catalog ===== */
+        .catalog{
+            position:relative;z-index:10;
+            padding:5rem 2rem 4rem;
+            max-width:1200px;margin:0 auto;
+        }
+
+        .catalog-divider{
+            width:60px;height:1px;margin:0 auto 2.5rem;
+            background:linear-gradient(90deg,transparent,var(--accent),transparent);
+        }
+
+        .catalog-header{text-align:center;margin-bottom:3.5rem}
+        .catalog-title{
+            font-family:'Crimson Pro',serif;font-weight:600;
+            font-size:1.5rem;color:var(--fg);margin-bottom:.5rem;
+        }
+        .catalog-sub{
+            font-size:.78rem;color:var(--muted);
+            max-width:480px;margin:0 auto;
+        }
+
+        .catalog-grid{
+            display:grid;
+            grid-template-columns:repeat(auto-fill,minmax(165px,1fr));
+            gap:1.2rem;
+        }
+
+        /* ===== Specimen Card ===== */
+        .spec-card{
+            display:flex;flex-direction:column;align-items:center;gap:.65rem;
+            padding:1.1rem .7rem .9rem;
+            background:var(--card);
+            border:1px solid var(--border);
+            border-radius:14px;cursor:pointer;
+            transition:border-color .35s ease,transform .35s ease,box-shadow .35s ease;
+            opacity:0;transform:translateY(28px);
+        }
+        .spec-card.visible{
+            opacity:1;transform:translateY(0);
+            transition:opacity .55s ease,transform .55s ease,border-color .35s ease,box-shadow .35s ease;
+        }
+        .spec-card:hover{
+            border-color:rgba(0,201,141,0.35);
+            transform:translateY(-5px);
+            box-shadow:0 14px 44px rgba(0,0,0,.5),0 0 20px var(--accent-dim);
+        }
+
+        .spec-thumb-row{
+            display:flex;align-items:center;gap:.6rem;
+        }
+
+        .spec-thumb{
+            width:70px;height:70px;border-radius:50%;
+            object-fit:cover;
+            border:2px solid rgba(200,152,62,0.25);
+            transition:border-color .3s ease;
+            flex-shrink:0;
+        }
+        .spec-card:hover .spec-thumb{border-color:var(--accent)}
+
+        .spec-micro{
+            width:30px;height:30px;
+            background:var(--bg-deep);
+            border:1px solid rgba(0,201,141,0.3);
+            border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            color:var(--accent);font-size:11px;flex-shrink:0;
+            transition:all .3s ease;
+        }
+        .spec-card:hover .spec-micro{
+            background:var(--accent);color:var(--bg-deep);
+            transform:scale(1.15);
+            box-shadow:0 0 10px var(--accent-dim);
+        }
+
+        .spec-label{text-align:center}
+        .spec-name{font-weight:600;font-size:.78rem;color:var(--fg)}
+        .spec-cat{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+
+        /* ===== Viewer Overlay ===== */
+        .viewer-overlay{
+            position:fixed;inset:0;z-index:5000;
+            background:var(--bg-deep);
+            display:flex;flex-direction:column;
+            opacity:0;visibility:hidden;
+            transition:opacity .35s ease,visibility .35s ease;
+        }
+        .viewer-overlay.active{opacity:1;visibility:visible}
+
+        .viewer-header{
+            display:flex;align-items:center;justify-content:space-between;
+            padding:.65rem 1.5rem;
+            background:rgba(4,8,16,0.96);
+            border-bottom:1px solid var(--border);
+            z-index:10;flex-shrink:0;
+            gap:1rem;
+        }
+
+        .viewer-back{
+            display:inline-flex;align-items:center;gap:.5rem;
+            padding:.45rem 1rem;
+            background:transparent;
+            border:1px solid rgba(0,201,141,0.35);
+            border-radius:8px;
+            color:var(--accent);
+            font-family:'Outfit',sans-serif;
+            font-size:.78rem;font-weight:500;
+            cursor:pointer;
+            transition:all .25s ease;
+            white-space:nowrap;flex-shrink:0;
+        }
+        .viewer-back:hover{
+            background:var(--accent);color:var(--bg-deep);
+        }
+        .viewer-back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+        .viewer-info{
+            display:flex;flex-direction:column;gap:.05rem;
+            text-align:center;flex:1;min-width:0;
+        }
+        .viewer-name{
+            font-family:'Crimson Pro',serif;font-weight:600;
+            font-size:1rem;color:var(--fg);
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+        }
+        .viewer-cat{
+            font-size:.62rem;color:var(--accent);
+            text-transform:uppercase;letter-spacing:.12em;
+        }
+
+        .viewer-close{
+            width:38px;height:38px;
+            background:transparent;
+            border:1px solid rgba(180,180,200,0.15);
+            border-radius:8px;color:var(--fg);
+            font-size:.95rem;cursor:pointer;
+            transition:all .25s ease;
+            display:flex;align-items:center;justify-content:center;
+            flex-shrink:0;
+        }
+        .viewer-close:hover{
+            background:rgba(255,50,50,0.12);
+            border-color:rgba(255,50,50,0.4);
+            color:#ff4444;
+        }
+        .viewer-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+        .viewer-body{
+            flex:1;position:relative;overflow:hidden;background:#000;
+        }
+
+        #osd-viewer{width:100%;height:100%}
+
+        .viewer-loading{
+            position:absolute;inset:0;
+            display:flex;flex-direction:column;
+            align-items:center;justify-content:center;gap:1rem;
+            z-index:5;pointer-events:none;
+            background:rgba(0,0,0,0.45);
+        }
+        .viewer-loading.hidden{display:none}
+
+        .spinner{
+            width:42px;height:42px;
+            border:3px solid rgba(0,201,141,0.1);
+            border-top-color:var(--accent);
+            border-radius:50%;
+            animation:spin .9s linear infinite;
+        }
+        @keyframes spin{to{transform:rotate(360deg)}}
+
+        .viewer-loading-text{font-size:.76rem;color:var(--muted)}
+
+        .viewer-hint{
+            position:absolute;bottom:1.1rem;left:50%;
+            transform:translateX(-50%);
+            padding:.5rem 1.3rem;
+            background:rgba(4,8,16,0.88);
+            border:1px solid var(--border);border-radius:8px;
+            color:var(--muted);font-size:.68rem;letter-spacing:.04em;
+            pointer-events:none;z-index:10;
+            transition:opacity 2s ease 4s;white-space:nowrap;
+        }
+        .viewer-hint.fade{opacity:0}
+
+        .viewer-zoom{
+            position:absolute;top:.9rem;right:.9rem;
+            padding:.25rem .65rem;
+            background:rgba(4,8,16,0.82);
+            border:1px solid var(--border);border-radius:6px;
+            color:var(--accent);font-size:.68rem;font-weight:600;
+            z-index:10;pointer-events:none;
+        }
+
+        /* ===== Footer ===== */
+        .site-footer{
+            position:relative;z-index:10;
+            text-align:center;padding:2.5rem 2rem 2rem;
+            border-top:1px solid var(--border);
+        }
+        .site-footer p{font-size:.72rem;color:rgba(120,124,150,0.5)}
+        .site-footer a{
+            color:var(--accent);text-decoration:none;
+            transition:color .2s ease;
+        }
+        .site-footer a:hover{color:#00e6a0}
+
+        /* ===== Responsive ===== */
+        @media(max-width:640px){
+            :root{--topbar-h:64px}
+            .top-bar{gap:1.4rem;padding:0 .8rem}
+            .top-bar-divider{height:26px}
+            .catalog-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem}
+            .spec-thumb{width:58px;height:58px}
+            .viewer-header{padding:.5rem 1rem;gap:.5rem}
+            .viewer-back{font-size:.7rem;padding:.35rem .7rem}
+            .viewer-name{font-size:.85rem}
+        }
+
+        @media(prefers-reduced-motion:reduce){
+            *,*::before,*::after{
+                animation-duration:.01ms!important;
+                animation-iteration-count:1!important;
+                transition-duration:.01ms!important;
+            }
+            .scan-line{display:none}
+        }
+    </style>
+</head>
+<body>
+    <!-- Canvas de partículas (palinomorfos flutuantes estilo eliis-geo) -->
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="scan-line" aria-hidden="true"></div>
+
+    <!-- ============ TOP BAR (LOGOS) ============ -->
+    <div class="top-bar" role="banner">
+        <a class="top-bar-logo" href="https://www.unisinos.br/itt/oceaneon" target="_blank" rel="noopener" aria-label="itt-Oceaneon — site oficial">
+            <img src="logos/itt-oceaneon.png" alt="itt-Oceaneon — Instituto Tecnológico de Paleoceanografia e Mudanças Climáticas">
+        </a>
+        <div class="top-bar-divider" aria-hidden="true"></div>
+        <a class="top-bar-logo" href="https://www.unisinos.br" target="_blank" rel="noopener" aria-label="UNISINOS — site oficial">
+            <img src="logos/unisinos.png" alt="UNISINOS — Universidade do Vale do Rio dos Sinos">
+        </a>
+    </div>
+
+    <!-- ============ HERO ============ -->
+    <header class="hero" role="banner">
+        <p class="hero-pre-title">Resultados Preliminares</p>
+
+        <h1 class="hero-title-pt">
+            Otimização de Parâmetros de<br>Escaneamento em Lâminas Palinológicas
+        </h1>
+
+        <p class="hero-subtitle-pt">Resultados Preliminares</p>
+
+        <p class="hero-title-en">
+            Optimization of Scanning Parameters for Palynological Slides: Preliminary Results
+        </p>
+
+        <p class="hero-authors">
+            Victória Borghetti &nbsp;&middot;&nbsp; Alessandra Santos &nbsp;&middot;&nbsp; Jorge Villegas-Martin &nbsp;&middot;&nbsp; Ricardo Vaz Breda &nbsp;&middot;&nbsp; Gerson Fauth
+        </p>
+
+        <p class="hero-institution">
+            Instituto Tecnológico de Paleoceanografia e Mudanças Climáticas (ITT Oceaneon)<br>
+            Universidade do Vale do Rio dos Sinos — Unisinos
+        </p>
+
+        <button class="hero-btn" onclick="document.getElementById('catalog').scrollIntoView({behavior:'smooth'})" aria-label="Explorar amostras">
+            Explorar Amostras <i class="fas fa-chevron-down" style="font-size:.65rem"></i>
+        </button>
+
+        <div class="hero-scroll" aria-hidden="true">
+            <span class="hero-scroll-text">Scroll</span>
+            <div class="hero-scroll-line"></div>
+        </div>
+    </header>
+
+    <!-- ============ CATÁLOGO ============ -->
+    <main>
+        <section id="catalog" class="catalog" role="region" aria-label="Catálogo de espécimes">
+            <div class="catalog-divider" aria-hidden="true"></div>
+            <div class="catalog-header">
+                <h2 class="catalog-title">Catálogo de Espécimes</h2>
+                <p class="catalog-sub">Clique no ícone do microscópio para explorar a lâmina em alta resolução</p>
+            </div>
+            <div class="catalog-grid" id="catalog-grid"></div>
+        </section>
+
+        <footer class="site-footer">
+            <p>
+                Desenvolvido por <a href="https://www.emergeware.com.br/" target="_blank" rel="noopener">Emergeware Technologies</a>
+                &nbsp;&middot;&nbsp; ITT Oceaneon — Unisinos
+            </p>
+        </footer>
+    </main>
+
+    <!-- ============ VISUALIZADOR ============ -->
+    <div class="viewer-overlay" id="viewer-overlay" role="dialog" aria-label="Visualizador de espécime" aria-modal="true">
+        <div class="viewer-header">
+            <button class="viewer-back" id="viewer-back-btn" aria-label="Voltar ao catálogo">
+                <i class="fas fa-arrow-left"></i> Voltar ao Catálogo
+            </button>
+            <div class="viewer-info">
+                <span class="viewer-name" id="viewer-name"></span>
+                <span class="viewer-cat">Palynomorph</span>
+            </div>
+            <button class="viewer-close" id="viewer-close-btn" aria-label="Fechar visualizador">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="viewer-body">
+            <div id="osd-viewer"></div>
+            <div class="viewer-loading" id="viewer-loading">
+                <div class="spinner"></div>
+                <span class="viewer-loading-text">Carregando espécime...</span>
+            </div>
+            <div class="viewer-hint" id="viewer-hint">
+                <i class="fas fa-mouse"></i>&ensp;Scroll para zoom&ensp;&middot;&ensp;Arraste para mover&ensp;&middot;&ensp;Duplo clique para zoom rápido
+            </div>
+            <div class="viewer-zoom" id="viewer-zoom"></div>
+        </div>
+    </div>
+
+    <script>
+    /* ==============================================================
+       DADOS DOS ESPÉCIMES
+       ----------------------------------------------------------------
+       Para produção:
+       1. Substitua "thumb" por miniaturas reais (~200px).
+       2. Substitua "full" por imagens de alta resolução.
+          Para ~40 MB, converter para DZI:
+            vips dzsave img.jpg saida --tile-size=256 --overlap=1
+          E usar: tileSources: "caminho/saida.dzi"
+       ============================================================== */
+    const specimens = [
+        { id:1, name:"Specimen A", cat:"Palynomorph", thumb:"images/thumbs/A.jpg", full:"images/dzi/A.dzi" },
+        { id:2, name:"Specimen B", cat:"Palynomorph", thumb:"images/thumbs/B.jpg", full:"images/dzi/B.dzi" },
+        { id:3, name:"Specimen C", cat:"Palynomorph", thumb:"images/thumbs/C.jpg", full:"images/dzi/C.dzi" },
+        { id:4, name:"Specimen D", cat:"Palynomorph", thumb:"images/thumbs/D.jpg", full:"images/dzi/D.dzi" },
+        { id:5, name:"Specimen E", cat:"Palynomorph", thumb:"images/thumbs/E.jpg", full:"images/dzi/E.dzi" },
+        { id:6, name:"Specimen F", cat:"Palynomorph", thumb:"images/thumbs/F.jpg", full:"images/dzi/F.dzi" },
+    ];
+
+    /* ==============================================================
+       RENDERIZAR CATÁLOGO
+    ============================================================== */
+    function renderCatalog(){
+        const grid = document.getElementById('catalog-grid');
+        grid.innerHTML = specimens.map(s => `
+            <article class="spec-card" data-id="${s.id}" tabindex="0" role="button"
+                     aria-label="Explorar ${s.name} no microscópio">
+                <div class="spec-thumb-row">
+                    <img class="spec-thumb" src="${s.thumb}" alt="${s.name}" loading="lazy" width="70" height="70">
+                    <div class="spec-micro" aria-hidden="true"><i class="fas fa-microscope"></i></div>
+                </div>
+                <div class="spec-label">
+                    <div class="spec-name">${s.name}</div>
+                    <div class="spec-cat">${s.cat}</div>
+                </div>
+            </article>
+        `).join('');
+
+        grid.querySelectorAll('.spec-card').forEach(card => {
+            const id = parseInt(card.dataset.id);
+            card.addEventListener('click', () => openViewer(id));
+            card.addEventListener('keydown', e => {
+                if(e.key==='Enter'||e.key===' '){e.preventDefault();openViewer(id)}
+            });
+        });
+
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if(entry.isIntersecting){
+                    const idx = Array.from(grid.children).indexOf(entry.target);
+                    setTimeout(() => entry.target.classList.add('visible'), idx * 55);
+                    obs.unobserve(entry.target);
+                }
+            });
+        },{threshold:0.08});
+        grid.querySelectorAll('.spec-card').forEach(c => obs.observe(c));
+    }
+
+    /* ==============================================================
+       VISUALIZADOR OPENSEADRAGON
+    ============================================================== */
+    let osdViewer = null;
+
+    function openViewer(id){
+        const sp = specimens.find(s => s.id === id);
+        if(!sp) return;
+
+        const overlay = document.getElementById('viewer-overlay');
+        const loading = document.getElementById('viewer-loading');
+        const hint    = document.getElementById('viewer-hint');
+        const zoomInd = document.getElementById('viewer-zoom');
+
+        document.getElementById('viewer-name').textContent = sp.name;
+        loading.classList.remove('hidden');
+        hint.classList.remove('fade');
+        zoomInd.textContent = '';
+
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        if(osdViewer){osdViewer.destroy();osdViewer=null}
+        document.getElementById('osd-viewer').innerHTML = '';
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                osdViewer = OpenSeadragon({
+                    id:'osd-viewer',
+                    prefixUrl:'https://cdn.jsdelivr.net/npm/openseadragon@4.1.1/build/openseadragon/images/',
+                    tileSources:sp.full,
+                    showNavigationControl:false,
+                    showZoomControl:false,
+                    showHomeControl:false,
+                    showFullPageControl:false,
+                    showRotationControl:false,
+                    showSequenceControl:false,
+                    showNavigator:true,
+                    navigatorPosition:'BOTTOM_RIGHT',
+                    navigatorHeight:'80px',
+                    navigatorWidth:'120px',
+                    navigatorBackground:'#040810',
+                    navigatorBorderColor:'rgba(0,201,141,0.22)',
+                    zoomPerScroll:1.12,
+                    zoomPerClick:2.0,
+                    pinchToZoom:true,
+                    clickToZoom:true,
+                    minZoomImageRatio:0.35,
+                    maxZoomPixelRatio:8,
+                    visibilityRatio:0.15,
+                    animationTime:0.6,
+                    blendTime:0.15,
+                    immediateRender:false,
+                    imageLoaderLimit:4,
+                });
+
+                osdViewer.addOnceHandler('open', () => {
+                    loading.classList.add('hidden');
+                    setTimeout(() => hint.classList.add('fade'), 300);
+                });
+
+                osdViewer.addHandler('tile-loaded', () => {
+                    const tiled = osdViewer.world.getItemAt(0);
+                    if(!tiled) return;
+                    const total = tiled.getTilesLoaded().length + tiled.getTilesPlaced().length;
+                    if(total > 0){
+                        const pct = Math.min(100, Math.round(tiled.getTilesLoaded().length / total * 100));
+                        loading.querySelector('.viewer-loading-text').textContent = 'Carregando alta resolução... ' + pct + '%';
+                    }
+                });
+
+                osdViewer.addHandler('zoom', ev => {
+                    zoomInd.textContent = ev.zoom.toFixed(1) + 'x';
+                });
+            });
+        });
+    }
+
+    function closeViewer(){
+        const overlay = document.getElementById('viewer-overlay');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+        if(osdViewer){osdViewer.destroy();osdViewer=null}
+        document.getElementById('osd-viewer').innerHTML = '';
+        /* Rolar suavemente de volta ao catálogo */
+        setTimeout(() => {
+            document.getElementById('catalog').scrollIntoView({behavior:'smooth'});
+        }, 100);
+    }
+
+    document.getElementById('viewer-back-btn').addEventListener('click', closeViewer);
+    document.getElementById('viewer-close-btn').addEventListener('click', closeViewer);
+    document.addEventListener('keydown', e => {if(e.key==='Escape') closeViewer()});
+
+    /* ==============================================================
+       CANVAS — PARTÍCULAS DE PALINOMORFOS (estilo eliis-geo.com)
+       Partículas com profundidade (z), brilho expansivo,
+       formas orgânicas, linhas de conexão e parallax com mouse
+    ============================================================== */
+    const cvs = document.getElementById('bg-canvas');
+    const ctx = cvs.getContext('2d');
+    let W = 0, H = 0;
+    let mx = -9999, my = -9999;
+    let particles = [];
+
+    function resizeCvs(){
+        W = cvs.width  = window.innerWidth;
+        H = cvs.height = window.innerHeight;
+    }
+    resizeCvs();
+
+    window.addEventListener('resize', () => { resizeCvs(); initParticles(); });
+    document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+    /* ----- Classe PalinomorphParticle ----- */
+    class PalinomorphParticle {
+        constructor(){
+            this.x = Math.random() * W;
+            this.y = Math.random() * H;
+            this.z = Math.random();                       // 0=longe, 1=perto
+            this.vx = (Math.random()-.5) * .22 * (.4 + this.z*.6);
+            this.vy = (Math.random()-.5) * .22 * (.4 + this.z*.6);
+            this.baseSize = 3 + this.z * 14 + Math.random() * 5;
+            this.phase = Math.random() * Math.PI * 2;
+            this.pSpeed = .001 + Math.random() * .0025;
+            this.wobble = .15 + Math.random() * .4;
+            this.type = Math.floor(Math.random() * 5);     // tipo de textura
+            this.spines = 5 + Math.floor(Math.random() * 8);
+            this.irreg = .04 + Math.random() * .12;
+            this.offX = 0; this.offY = 0;                  // parallax offset
+
+            /* Paleta biológica */
+            const p = Math.random();
+            if(p < .42){
+                /* Âmbar / dourado */
+                this.cr = 195 + Math.random()*50;
+                this.cg = 140 + Math.random()*45;
+                this.cb = 25  + Math.random()*30;
+            } else if(p < .72){
+                /* Verde teal */
+                this.cr = 0   + Math.random()*25;
+                this.cg = 165 + Math.random()*55;
+                this.cb = 120 + Math.random()*50;
+            } else {
+                /* Azul-frio */
+                this.cr = 140 + Math.random()*55;
+                this.cg = 160 + Math.random()*50;
+                this.cb = 200 + Math.random()*50;
+            }
+
+            this.baseAlpha = .08 + this.z * .3;
+        }
+
+        update(){
+            this.phase += this.pSpeed;
+
+            /* Movimento base + wobble */
+            this.x += this.vx + Math.sin(this.phase) * .08 * this.wobble;
+            this.y += this.vy + Math.cos(this.phase * .75) * .06 * this.wobble;
+
+            /* Pulsação de tamanho */
+            this.size = Math.max(1, this.baseSize * (1 + Math.sin(this.phase * 1.8) * .06));
+
+            /* Parallax com mouse — partículas mais perto (z alto) deslocam mais */
+            const tOffX = (mx - W/2) * this.z * .012;
+            const tOffY = (my - H/2) * this.z * .012;
+            this.offX += (tOffX - this.offX) * .018;
+            this.offY += (tOffY - this.offY) * .018;
+
+            /* Repulsão suave do cursor */
+            const dx = mx - (this.x + this.offX);
+            const dy = my - (this.y + this.offY);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < 160){
+                const f = (160 - dist) / 160 * .012;
+                this.x -= dx * f;
+                this.y -= dy * f;
+            }
+
+            /* Wrap */
+            if(this.x < -80) this.x += W + 160;
+            if(this.x > W + 80) this.x -= W + 160;
+            if(this.y < -80) this.y += H + 160;
+            if(this.y > H + 80) this.y -= H + 160;
+        }
+
+        draw(){
+            const px = this.x + this.offX;
+            const py = this.y + this.offY;
+            const s  = this.size;
+            const a  = this.baseAlpha;
+            const r  = this.cr|0, g = this.cg|0, b = this.cb|0;
+
+            /* 1) Glow externo — grande e suave (como as luzes do eliis-geo) */
+            const outerR = Math.max(1, s * 4.5);
+            const gOuter = ctx.createRadialGradient(px, py, 0, px, py, outerR);
+            gOuter.addColorStop(0, `rgba(${r},${g},${b},${a * .35})`);
+            gOuter.addColorStop(.35,`rgba(${r},${g},${b},${a * .1})`);
+            gOuter.addColorStop(1,  `rgba(${r},${g},${b},0)`);
+            ctx.fillStyle = gOuter;
+            ctx.fillRect(px - outerR, py - outerR, outerR*2, outerR*2);
+
+            /* 2) Glow interno */
+            const innerR = Math.max(1, s * 1.9);
+            const gInner = ctx.createRadialGradient(px, py, 0, px, py, innerR);
+            gInner.addColorStop(0, `rgba(${r},${g},${b},${a * .55})`);
+            gInner.addColorStop(1, `rgba(${r},${g},${b},0)`);
+            ctx.fillStyle = gInner;
+            ctx.beginPath();
+            ctx.arc(px, py, innerR, 0, Math.PI*2);
+            ctx.fill();
+
+            /* 3) Corpo orgânico (só para partículas mais próximas) */
+            if(this.z > .25){
+                const bodyR = s * .55;
+                ctx.beginPath();
+                const segs = 28;
+                for(let i=0; i<=segs; i++){
+                    const ang = (i/segs)*Math.PI*2;
+                    const rr = bodyR + Math.sin(ang * this.spines + this.phase) * bodyR * this.irreg;
+                    const bx = px + Math.cos(ang) * rr;
+                    const by = py + Math.sin(ang) * rr;
+                    if(i===0) ctx.moveTo(bx, by);
+                    else ctx.lineTo(bx, by);
+                }
+                ctx.closePath();
+
+                const gBody = ctx.createRadialGradient(px - bodyR*.2, py - bodyR*.2, 0, px, py, bodyR);
+                gBody.addColorStop(0, `rgba(${Math.min(255,r+50)},${Math.min(255,g+50)},${Math.min(255,b+30)},${a * .35})`);
+                gBody.addColorStop(1, `rgba(${r},${g},${b},${a * .1})`);
+                ctx.fillStyle = gBody;
+                ctx.fill();
+
+                ctx.strokeStyle = `rgba(${r},${g},${b},${a * .12})`;
+                ctx.lineWidth = Math.max(.3, s * .02);
+                ctx.stroke();
+
+                /* Textura interna para partículas muito perto */
+                if(this.z > .55){
+                    ctx.globalAlpha = a * .4;
+                    if(this.type === 1){
+                        /* Pontos internos */
+                        for(let i=0; i<8; i++){
+                            const aa = (i/8)*Math.PI*2 + this.phase*.3;
+                            const dd = bodyR * (.2 + (i*7%5)/5 * .35);
+                            ctx.beginPath();
+                            ctx.arc(px+Math.cos(aa)*dd, py+Math.sin(aa)*dd, Math.max(.4, bodyR*.04), 0, Math.PI*2);
+                            ctx.fillStyle = `rgba(${Math.min(255,r+70)},${Math.min(255,g+70)},${b},0.5)`;
+                            ctx.fill();
+                        }
+                    } else if(this.type === 2){
+                        /* Anéis */
+                        [.5,.28].forEach(f => {
+                            ctx.beginPath();
+                            ctx.arc(px, py, bodyR*f, 0, Math.PI*2);
+                            ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`;
+                            ctx.lineWidth = Math.max(.3, bodyR*.025);
+                            ctx.stroke();
+                        });
+                    } else if(this.type === 3){
+                        /* Espinhos */
+                        for(let i=0; i<this.spines; i++){
+                            const aa = (i/this.spines)*Math.PI*2;
+                            ctx.beginPath();
+                            ctx.moveTo(px+Math.cos(aa)*bodyR*.8, py+Math.sin(aa)*bodyR*.8);
+                            ctx.lineTo(px+Math.cos(aa)*bodyR*1.2, py+Math.sin(aa)*bodyR*1.2);
+                            ctx.strokeStyle = `rgba(${r},${g},${b},0.35)`;
+                            ctx.lineWidth = Math.max(.4, bodyR*.025);
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            /* 4) Núcleo brilhante */
+            const coreR = Math.max(.5, s * .28);
+            const gCore = ctx.createRadialGradient(px, py, 0, px, py, coreR);
+            gCore.addColorStop(0, `rgba(${Math.min(255,r+90)},${Math.min(255,g+90)},${Math.min(255,b+70)},${a * .9})`);
+            gCore.addColorStop(1, `rgba(${r},${g},${b},0)`);
+            ctx.fillStyle = gCore;
+            ctx.beginPath();
+            ctx.arc(px, py, coreR, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    /* ----- Inicializar partículas ----- */
+    function initParticles(){
+        const count = Math.min(65, Math.max(18, Math.floor(W * H / 18000)));
+        particles = [];
+        for(let i=0; i<count; i++) particles.push(new PalinomorphParticle());
+    }
+
+    /* ----- Linhas de conexão (rede/constelação) ----- */
+    function drawConnections(){
+        const maxDist = 135;
+        ctx.lineWidth = .5;
+        for(let i=0; i<particles.length; i++){
+            const pi = particles[i];
+            const pix = pi.x + pi.offX, piy = pi.y + pi.offY;
+            for(let j=i+1; j<particles.length; j++){
+                const pj = particles[j];
+                const pjx = pj.x + pj.offX, pjy = pj.y + pj.offY;
+                const dx = pix - pjx, dy = piy - pjy;
+                const d = Math.sqrt(dx*dx + dy*dy);
+                if(d < maxDist){
+                    const al = (1 - d/maxDist) * .055;
+                    ctx.beginPath();
+                    ctx.moveTo(pix, piy);
+                    ctx.lineTo(pjx, pjy);
+                    ctx.strokeStyle = `rgba(0,180,140,${al})`;
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+
+    /* ----- Loop de animação ----- */
+    function animLoop(){
+        ctx.clearRect(0, 0, W, H);
+
+        /* Gradientes atmosféricos de fundo */
+        const g1 = ctx.createRadialGradient(W*.22, H*.28, 0, W*.22, H*.28, W*.7);
+        g1.addColorStop(0, 'rgba(6,16,26,0.3)');
+        g1.addColorStop(1, 'rgba(4,8,16,0)');
+        ctx.fillStyle = g1;
+        ctx.fillRect(0, 0, W, H);
+
+        const g2 = ctx.createRadialGradient(W*.78, H*.72, 0, W*.78, H*.72, W*.5);
+        g2.addColorStop(0, 'rgba(0,30,25,0.15)');
+        g2.addColorStop(1, 'rgba(4,8,16,0)');
+        ctx.fillStyle = g2;
+        ctx.fillRect(0, 0, W, H);
+
+        const g3 = ctx.createRadialGradient(W*.5, H*.15, 0, W*.5, H*.15, W*.6);
+        g3.addColorStop(0, 'rgba(20,12,5,0.12)');
+        g3.addColorStop(1, 'rgba(4,8,16,0)');
+        ctx.fillStyle = g3;
+        ctx.fillRect(0, 0, W, H);
+
+        /* Ordenar por z (longe primeiro) */
+        particles.sort((a, b) => a.z - b.z);
+
+        /* Conexões (desenhadas antes das partículas) */
+        drawConnections();
+
+        /* Partículas */
+        particles.forEach(p => { p.update(); p.draw(); });
+
+        requestAnimationFrame(animLoop);
+    }
+
+    initParticles();
+    animLoop();
+
+    /* ==============================================================
+       INICIALIZAÇÃO
+    ============================================================== */
+    renderCatalog();
+    </script>
+</body>
+</html>
